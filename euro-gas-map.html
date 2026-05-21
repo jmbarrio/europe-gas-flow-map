@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Euro-Gas Monitor - Standalone</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body { margin: 0; padding: 0; background-color: #050608; font-family: sans-serif; overflow: hidden; }
+    #map { width: 100vw; height: 100vh; background: #050608; z-index: 0; }
+    .overlay { position: absolute; z-index: 400; pointer-events: none; }
+    .top-left { top: 24px; left: 24px; display: flex; gap: 16px; font-family: system-ui, -apple-system, sans-serif; }
+    .bottom-right { bottom: 32px; right: 32px; display: flex; gap: 32px; background: rgba(0,0,0,0.6); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); padding: 20px; border-radius: 16px; border: 1px solid rgba(51,65,85,0.5); color: white; font-family: system-ui, -apple-system, sans-serif; }
+    .badge { padding: 8px 16px; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid #334155; border-radius: 9999px; color: #f1f5f9; font-size: 12px; font-weight: 500; text-transform: uppercase; display: flex; align-items: center; gap: 12px; }
+    .badge .dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 8px #10b981; }
+    
+    .leaflet-tooltip.custom-tooltip { background: rgba(15,23,42,0.9); color: white; border: 1px solid #334155; border-radius: 4px; padding: 4px; font-family: system-ui, -apple-system, sans-serif; }
+    .tooltip-content { display: flex; flex-direction: column; gap: 4px; font-size: 12px; min-width: 220px; }
+    .tooltip-content strong { border-bottom: 1px solid #475569; padding-bottom: 4px; margin-bottom: 2px; font-size: 14px; }
+    .tooltip-row { display: flex; justify-content: space-between; gap: 16px; }
+    .tooltip-label { color: #94a3b8; }
+    
+    .leaflet-tooltip.permanent-tooltip { background: transparent; border: 0; box-shadow: none; color: white; font-weight: bold; font-size: 12px; text-shadow: 0px 0px 4px #000; font-family: system-ui, -apple-system, sans-serif; }
+    .leaflet-tooltip.permanent-tooltip-yellow { color: #facc15; text-shadow: 0px 0px 4px #000; }
+    
+    .side-panel { position: absolute; pointer-events: auto; top: 80px; left: 24px; width: 300px; max-height: calc(100vh - 120px); overflow-y: auto; background: rgba(12, 14, 20, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(51,65,85,0.6); border-radius: 12px; padding: 20px; z-index: 400; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; gap: 24px; }
+    .panel-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; margin-bottom: 12px; font-weight: bold; border-bottom: 1px solid #334155; padding-bottom: 8px; }
+    .legend-item { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; font-size: 12px; }
+    .legend-line { width: 32px; height: 3px; }
+    .legend-circle { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #facc15; display: flex; align-items: center; justify-content: center; background: rgba(250, 204, 21, 0.2); }
+    .legend-circle::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #facc15; }
+    .grad-line { width: 32px; height: 4px; background: linear-gradient(90deg, #10b981, #064e3b); border-radius: 2px; }
+    
+    .source-card { background: rgba(30, 41, 59, 0.5); border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-bottom: 12px; transition: border-color 0.2s; }
+    .source-card:hover { border-color: #0ea5e9; }
+    .source-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .source-title { font-size: 13px; font-weight: 600; color: #f8fafc; }
+    .source-header a { font-size: 11px; color: #38bdf8; text-decoration: none; font-weight: 500; }
+    .source-header a:hover { text-decoration: underline; }
+    .source-desc { font-size: 11px; color: #94a3b8; line-height: 1.4; margin: 0; }
+    
+    .side-panel::-webkit-scrollbar { width: 6px; }
+    .side-panel::-webkit-scrollbar-track { background: transparent; }
+    .side-panel::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="overlay top-left">
+    <div class="badge" style="color: #94a3b8">CRS: <span style="color:white; font-family: monospace; margin-left: 4px;">EPSG:3857</span></div>
+  </div>
+  <div class="overlay bottom-right">
+    <div style="display: flex; flex-direction: column;">
+        <span style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold; letter-spacing: 0.1em;">Flujo de Entrada Total</span>
+        <span style="font-size: 30px; font-family: monospace; font-weight: 300;">342.8 <span style="font-size: 14px; color: #94a3b8;">bcm</span></span>
+    </div>
+    <div style="display: flex; flex-direction: column;">
+        <span style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold; letter-spacing: 0.1em;">Variación Anual</span>
+        <span style="font-size: 30px; font-family: monospace; font-weight: 300; color: #f87171;">-24.1 <span style="font-size: 14px; color: #475569;">%</span></span>
+    </div>
+  </div>
+  
+  <div class="side-panel">
+    <div>
+      <div class="panel-section-title">Leyenda: Estado</div>
+      <div class="legend-item"><div class="legend-line" style="background: #10b981;"></div> Flujo Activo</div>
+      <div class="legend-item"><div class="legend-line" style="background: #f59e0b;"></div> Flujo Reducido</div>
+      <div class="legend-item"><div class="legend-line" style="background: transparent; border-top: 3px dotted #64748b;"></div> Cerrado / Suspendido</div>
+      <div class="legend-item"><div class="legend-line" style="background: transparent; border-top: 3px dashed #ef4444;"></div> Saboteado / Destruido</div>
+    </div>
+    <div>
+      <div class="panel-section-title">Mapeo de Atributos</div>
+      <div class="legend-item"><div class="grad-line"></div> Grosor = Capacidad (Bcm/a)</div>
+      <div class="legend-item"><div class="legend-circle"></div> Terminal LNG (Radio=Cap)</div>
+    </div>
+    <div>
+      <div class="panel-section-title">Fuentes de Datos</div>
+      
+        <div class="source-card">
+          <div class="source-header"><span class="source-title">ENTSOG Transparency Platform</span> <a href="https://transparency.entsog.eu/" target="_blank">Enlace ↗</a></div>
+          <p class="source-desc">Plataforma oficial europea de operadores de redes de transmisión de gas. Proporciona datos de flujos casi en tiempo real (puntos transfronterizos), así como detalles de las infraestructuras.</p>
+        </div>
+    
+        <div class="source-card">
+          <div class="source-header"><span class="source-title">Global Energy Monitor (GEM)</span> <a href="https://globalenergymonitor.org/projects/europe-gas-tracker/" target="_blank">Enlace ↗</a></div>
+          <p class="source-desc">Mantiene el 'Global Gas Infrastructure Tracker' y el 'Europe Gas Tracker', con archivos GeoJSON, Excel y shapefiles descargables de todos los gasoductos y terminales LNG del mundo.</p>
+        </div>
+    
+        <div class="source-card">
+          <div class="source-header"><span class="source-title">Dataset de Harvard Dataverse: Europe Gas Network</span> <a href="https://dataverse.harvard.edu/" target="_blank">Enlace ↗</a></div>
+          <p class="source-desc">Varios papers e investigaciones depositan mapas topológicos en formato Shapefile (NODES, EDGES) para simulación hidrodinámica del sistema europeo de gas.</p>
+        </div>
+    
+        <div class="source-card">
+          <div class="source-header"><span class="source-title">Eurostat - Energy statistics</span> <a href="https://ec.europa.eu/eurostat/web/energy/data/database" target="_blank">Enlace ↗</a></div>
+          <p class="source-desc">Estadísticas a nivel país de importación neta, consumos y dependencia de gas (No proporciona shapefiles directos de tubos, pero es vital para mapeos coropléticos).</p>
+        </div>
+    
+    </div>
+  </div>
+  
+  <script>
+    const mapData = [{"type":"Feature","geometry":{"type":"LineString","coordinates":[[28.7,60.7],[26,59.8],[24,59.4],[22,58.5],[20,57.5],[18,56.5],[16,55.5],[14.5,54.5],[13.6,54.1]]},"properties":{"id":"ns1","name":"Nord Stream 1","type":"pipeline","capacity_bcm_yr":55,"status":"sabotaged","flow_current_bcm":0,"flow_historic_bcm":59.2,"origin":"Russia (Vyborg)","destination":"Germany (Greifswald)"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[28.2,59.5],[26,59.7],[24,59.3],[22,58.4],[20,57.4],[18,56.4],[16,55.4],[14.5,54.4],[13.6,54.2]]},"properties":{"id":"ns2","name":"Nord Stream 2","type":"pipeline","capacity_bcm_yr":55,"status":"sabotaged","flow_current_bcm":0,"flow_historic_bcm":0,"origin":"Russia (Ust-Luga)","destination":"Germany (Greifswald)"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[34.9,57],[32,54.8],[27.5,53.9],[25.3,53.1],[23.8,53],[21,52.2],[19,52.6],[14.5,52.4]]},"properties":{"id":"yamal","name":"Yamal-Europe","type":"pipeline","capacity_bcm_yr":32.9,"status":"closed","flow_current_bcm":0,"flow_historic_bcm":30.5,"origin":"Russia (Torzhok)","destination":"Germany (Mallnow)"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[35.2,51.2],[34.8,50.9],[33,50.5],[30.5,50.4],[28.6,49.8],[25.6,49.5],[22.2,48.6],[22,48.5],[17.1,48.1],[16.8,48.2]]},"properties":{"id":"brotherhood","name":"Brotherhood (Transgas/Bratstvo)","type":"pipeline","capacity_bcm_yr":100,"status":"reduced","flow_current_bcm":15,"flow_historic_bcm":80,"origin":"Russia (via Ukraine)","destination":"Slovakia/Austria (Baumgarten)"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[37.3,44.8],[34,43.5],[31.5,42.5],[28,41.6],[27.4,42],[25.5,42.4],[22.8,43.8],[20,44.5],[19,46],[16.8,48.2]]},"properties":{"id":"turkstream","name":"TurkStream","type":"pipeline","capacity_bcm_yr":31.5,"status":"active","flow_current_bcm":25.1,"flow_historic_bcm":31.5,"origin":"Russia (Anapa)","destination":"Turkey (Kiyikoy) -> SE Europe"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[41.2,39.9],[39,39.7],[35,39.5],[32.8,39.9],[29,40.5],[26.3,40.9],[23.5,41],[20,40.7],[19,40.5],[18.3,40.2]]},"properties":{"id":"tap","name":"TANAP & TAP (Southern Gas Corridor)","type":"pipeline","capacity_bcm_yr":10,"status":"active","flow_current_bcm":10,"flow_historic_bcm":10,"origin":"Azerbaijan (Caspian)","destination":"Italy (Melendugno)"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[6.9,62.8],[4.5,61.5],[3,60],[1.9,58.3],[0.8,56],[0.1,53.6]]},"properties":{"id":"langeled","name":"Langeled","type":"pipeline","capacity_bcm_yr":25.5,"status":"active","flow_current_bcm":24,"flow_historic_bcm":20,"origin":"Norway (Nyhamna)","destination":"UK (Easington)"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[5.5,59.2],[5,58],[5.5,56.5],[6.5,55],[7.1,53.6]]},"properties":{"id":"europipe","name":"Europipe I & II","type":"pipeline","capacity_bcm_yr":40,"status":"active","flow_current_bcm":38,"flow_historic_bcm":35,"origin":"Norway (Kärstø / Kollsnes)","destination":"Germany (Dornum)"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[5.8,56],[8.1,55.8],[9,55.5],[12,55.1],[13.5,54.8],[14.8,54.1]]},"properties":{"id":"balticpipe","name":"Baltic Pipe","type":"pipeline","capacity_bcm_yr":10,"status":"active","flow_current_bcm":9,"flow_historic_bcm":5,"origin":"Norway / Denmark","destination":"Poland (Niechorze)"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[-1.3,35.3],[-1.8,36],[-2.4,36.8]]},"properties":{"id":"medgaz","name":"Medgaz","type":"pipeline","capacity_bcm_yr":10.5,"status":"active","flow_current_bcm":9.5,"flow_historic_bcm":8,"origin":"Algeria (Beni Saf)","destination":"Spain (Almeria)"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[3.2,32.9],[8,36.5],[10,36.8],[11,37],[12.5,37.5],[13.5,38],[15.5,38.2],[16,39],[14,41],[13,42],[11.5,44.5]]},"properties":{"id":"transmed","name":"Transmed (Enrico Mattei)","type":"pipeline","capacity_bcm_yr":30.2,"status":"active","flow_current_bcm":23,"flow_historic_bcm":22,"origin":"Algeria (via Tunisia)","destination":"Italy (Mazara del Vallo)"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[3.2,32.9],[-1.5,34],[-3.5,34.5],[-5.9,35.8],[-6.4,36],[-4.7,37.8]]},"properties":{"id":"maghreb","name":"Maghreb-Europe (MEG)","type":"pipeline","capacity_bcm_yr":11.5,"status":"closed","flow_current_bcm":0,"flow_historic_bcm":10,"origin":"Algeria (via Morocco)","destination":"Spain (Tarifa)"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[2.16,41.34]},"properties":{"id":"lng_barcelona","name":"Barcelona LNG Terminal","type":"lng_terminal","capacity_bcm_yr":15.6,"status":"active","origin":"Global LNG","destination":"Spain"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[3.18,51.35]},"properties":{"id":"lng_zeebrugge","name":"Zeebrugge LNG Terminal","type":"lng_terminal","capacity_bcm_yr":25,"status":"active","origin":"Global LNG","destination":"Belgium"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[4.05,51.98]},"properties":{"id":"lng_gate","name":"Gate Terminal (Rotterdam)","type":"lng_terminal","capacity_bcm_yr":16,"status":"active","origin":"Global LNG","destination":"Netherlands"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[14.28,53.91]},"properties":{"id":"lng_swinoujscie","name":"Świnoujście LNG Terminal","type":"lng_terminal","capacity_bcm_yr":6.2,"status":"active","origin":"Global LNG","destination":"Poland"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[14.54,45.21]},"properties":{"id":"lng_krk","name":"Krk FSRU","type":"lng_terminal","capacity_bcm_yr":2.9,"status":"active","origin":"Global LNG","destination":"Croatia"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[23.4,37.96]},"properties":{"id":"lng_revithoussa","name":"Revithoussa LNG Terminal","type":"lng_terminal","capacity_bcm_yr":7,"status":"active","origin":"Global LNG","destination":"Greece"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-5.09,51.7]},"properties":{"id":"lng_southhook","name":"South Hook LNG Terminal","type":"lng_terminal","capacity_bcm_yr":21,"status":"active","origin":"Global LNG","destination":"UK"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[9.93,53.53]},"properties":{"id":"lng_brunsbuttel","name":"Elbehafen FSRU (Brunsbüttel)","type":"lng_terminal","capacity_bcm_yr":7.5,"status":"active","origin":"Global LNG","destination":"Germany"}},{"type":"Feature","geometry":{"type":"Point","coordinates":[12.63,45.09]},"properties":{"id":"lng_cavarzere","name":"Cavarzere Isola Porto Levante","type":"lng_terminal","capacity_bcm_yr":8,"status":"active","origin":"Global LNG","destination":"Italy"}}];
+    
+    const getPipelineColor = (status) => {
+        if(status === 'active') return '#10b981';
+        if(status === 'reduced') return '#f59e0b';
+        if(status === 'closed') return '#64748b';
+        if(status === 'sabotaged') return '#ef4444';
+        return '#fff';
+    };
+
+    const getPipelineDashArray = (status) => {
+        if(status === 'sabotaged') return '10, 10';
+        if(status === 'closed') return '2, 6';
+        return 'none';
+    };
+
+    const map = L.map('map', { zoomControl: false }).setView([52.0, 15.0], 4);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO'
+    }).addTo(map);
+
+    L.control.zoom({ position: 'topright' }).addTo(map);
+
+    let activeLabels = [];
+
+    mapData.forEach(feature => {
+        const props = feature.properties;
+        if (feature.geometry.type === 'LineString') {
+            const coords = feature.geometry.coordinates.map(c => [c[1], c[0]]);
+            const weight = (props.capacity_bcm_yr / 10) + 1.5;
+            const pl = L.polyline(coords, {
+                color: getPipelineColor(props.status),
+                weight: weight,
+                dashArray: getPipelineDashArray(props.status),
+                opacity: 0.8
+            }).addTo(map);
+
+            const tooltipHtml = `
+                <div class="tooltip-content">
+                    <strong>${props.name}</strong>
+                    <div class="tooltip-row"><span class="tooltip-label">Origen:</span><span>${props.origin}</span></div>
+                    <div class="tooltip-row"><span class="tooltip-label">Destino:</span><span>${props.destination}</span></div>
+                    <div class="tooltip-row"><span class="tooltip-label">Estado:</span><span style="color: ${getPipelineColor(props.status)}; text-transform: uppercase; font-weight: bold;">${props.status}</span></div>
+                    <div class="tooltip-row"><span class="tooltip-label">Capacidad:</span><span>${props.capacity_bcm_yr} BCM/año</span></div>
+                </div>
+            `;
+            pl.bindTooltip(tooltipHtml, { className: 'custom-tooltip', sticky: true });
+
+            const midPoint = coords[Math.floor(coords.length / 2)];
+            const labelIcon = L.divIcon({ className: 'bg-transparent', html: '', iconSize: [0,0] });
+            const marker = L.marker(midPoint, { icon: labelIcon, interactive: false });
+            
+            const label = L.tooltip({ permanent: true, direction: 'center', className: 'permanent-tooltip' })
+               .setContent(props.name);
+
+            marker.bindTooltip(label);
+            activeLabels.push(marker);
+
+        } else if (feature.geometry.type === 'Point') {
+            const latlng = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
+            const radius = props.capacity_bcm_yr + 3;
+            const cm = L.circleMarker(latlng, {
+                color: '#facc15',
+                fillColor: '#facc15',
+                fillOpacity: 0.8,
+                weight: 2,
+                radius: radius
+            }).addTo(map);
+
+            const tooltipHtml = `
+                <div class="tooltip-content">
+                    <strong>${props.name}</strong>
+                    <div class="tooltip-row"><span class="tooltip-label">Tipo:</span><span>Terminal GNL</span></div>
+                    <div class="tooltip-row"><span class="tooltip-label">Capacidad:</span><span>${props.capacity_bcm_yr} BCM/año</span></div>
+                </div>
+            `;
+            cm.bindTooltip(tooltipHtml, { className: 'custom-tooltip', sticky: true });
+
+            const labelIcon = L.divIcon({ className: 'bg-transparent', html: '', iconSize: [0,0] });
+            const marker = L.marker(latlng, { icon: labelIcon, interactive: false });
+
+            const label = L.tooltip({ permanent: true, direction: 'right', className: 'permanent-tooltip permanent-tooltip-yellow', offset: [radius + 5, 0] })
+               .setContent(props.name);
+
+            marker.bindTooltip(label);
+            activeLabels.push(marker);
+        }
+    });
+
+    const toggleLabels = () => {
+        const zoom = map.getZoom();
+        if (zoom >= 5) {
+            activeLabels.forEach(m => {
+                if(!map.hasLayer(m)) m.addTo(map);
+            });
+        } else {
+            activeLabels.forEach(m => {
+                if(map.hasLayer(m)) map.removeLayer(m);
+            });
+        }
+    };
+
+    map.on('zoomend', toggleLabels);
+    toggleLabels(); 
+
+  </script>
+</body>
+</html>
